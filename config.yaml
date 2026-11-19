@@ -1,6 +1,6 @@
 name: "DVR alarm server"
 description: "DVR alarm server for some cam"
-version: "1.2.0"
+version: "1.3.0"
 slug: "dvr_alarm_server"
 init: false
 arch:

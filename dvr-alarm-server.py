@@ -6,7 +6,7 @@ import os
 import struct
 import json
 import socketserver
-import paho.mqtt.publish as mqtt
+import paho.mqtt.client as paho_mqtt
 import logging
 
 root = logging.getLogger()
@@ -32,33 +32,32 @@ def log_info(info, *arguments):
 
 
 class MQTTPublisher:
-    mqttHost = '127.0.0.1'
-    mqttPort = 1883
-
-    mqttUser = ''
-    mqttPass = ''
-    mqttTopic = ''
-
-    mqttDebug = False
-
     def __init__(self, host, port, user, passwd, topic, debug):
-        self.mqttHost = host
-        self.mqttPort = port
-        self.mqttUser = user
-        self.mqttPass = passwd
         self.mqttTopic = topic
         self.mqttDebug = debug
 
+        # совместимо и с paho 1.x, и с 2.x
+        try:
+            self.client = paho_mqtt.Client(
+                paho_mqtt.CallbackAPIVersion.VERSION2,
+                client_id="dvr-alarm-server")
+        except AttributeError:
+            self.client = paho_mqtt.Client(client_id="dvr-alarm-server")
+
+        if user and passwd:
+            self.client.username_pw_set(user, passwd)
+
+        self.client.reconnect_delay_set(min_delay=1, max_delay=60)
+        self.client.on_connect = lambda *a, **k: log_info("MQTT connected")
+        self.client.on_disconnect = lambda *a, **k: log_info("MQTT disconnected")
+
+        # connect_async не падает, если брокер ещё не поднялся при старте аддона
+        self.client.connect_async(host, port, keepalive=60)
+        self.client.loop_start()
+
     def publish(self, serialID, event):
-
-        auth_data = None
-        if (self.mqttUser and self.mqttPass):
-            auth_data = {'username': self.mqttUser, 'password': self.mqttPass}
-
         topic = self.mqttTopic + '/{}/event'.format(serialID)
-        mqtt.single(topic=topic, payload=event, retain=False,
-                    hostname=self.mqttHost, port=self.mqttPort, auth=auth_data, tls=None)
-
+        self.client.publish(topic, payload=event, qos=0, retain=False)
         if self.mqttDebug:
             log_info("EVENT:", event)
 
